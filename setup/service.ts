@@ -9,6 +9,7 @@ import fs from 'fs';
 import os from 'os';
 import path from 'path';
 
+import { readEnvFile } from '../src/env.js';
 import { logger } from '../src/logger.js';
 import {
   getPlatform,
@@ -19,6 +20,71 @@ import {
   isWSL,
 } from './platform.js';
 import { emitStatus } from './status.js';
+
+const SERVICE_PROXY_KEYS = [
+  'HTTP_PROXY',
+  'HTTPS_PROXY',
+  'ALL_PROXY',
+  'NO_PROXY',
+  'http_proxy',
+  'https_proxy',
+  'all_proxy',
+  'no_proxy',
+];
+
+const SERVICE_PROXY_GROUPS = [
+  ['HTTP_PROXY', 'http_proxy'],
+  ['HTTPS_PROXY', 'https_proxy'],
+  ['ALL_PROXY', 'all_proxy'],
+  ['NO_PROXY', 'no_proxy'],
+] as const;
+
+function escapeXml(value: string): string {
+  return value
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&apos;');
+}
+
+function getServiceEnvironment(homeDir: string): Record<string, string> {
+  const envFileValues = readEnvFile(SERVICE_PROXY_KEYS);
+  const serviceEnv: Record<string, string> = {
+    PATH: `/usr/local/bin:/usr/bin:/bin:${homeDir}/.local/bin`,
+    HOME: homeDir,
+  };
+
+  for (const [upperKey, lowerKey] of SERVICE_PROXY_GROUPS) {
+    const value =
+      process.env[upperKey] ||
+      process.env[lowerKey] ||
+      envFileValues[upperKey] ||
+      envFileValues[lowerKey];
+
+    if (value) {
+      serviceEnv[upperKey] = value;
+      serviceEnv[lowerKey] = value;
+    }
+  }
+
+  return serviceEnv;
+}
+
+function renderLaunchdEnvironment(env: Record<string, string>): string {
+  return Object.entries(env)
+    .map(
+      ([key, value]) =>
+        `        <key>${escapeXml(key)}</key>\n        <string>${escapeXml(value)}</string>`,
+    )
+    .join('\n');
+}
+
+function renderSystemdEnvironment(env: Record<string, string>): string {
+  return Object.entries(env)
+    .map(([key, value]) => `Environment=${JSON.stringify(`${key}=${value}`)}`)
+    .join('\n');
+}
 
 export async function run(_args: string[]): Promise<void> {
   const projectRoot = process.cwd();
@@ -80,6 +146,7 @@ function setupLaunchd(
     'com.nanoclaw.plist',
   );
   fs.mkdirSync(path.dirname(plistPath), { recursive: true });
+  const serviceEnv = getServiceEnvironment(homeDir);
 
   const plist = `<?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
@@ -100,10 +167,7 @@ function setupLaunchd(
     <true/>
     <key>EnvironmentVariables</key>
     <dict>
-        <key>PATH</key>
-        <string>/usr/local/bin:/usr/bin:/bin:${homeDir}/.local/bin</string>
-        <key>HOME</key>
-        <string>${homeDir}</string>
+  ${renderLaunchdEnvironment(serviceEnv)}
     </dict>
     <key>StandardOutPath</key>
     <string>${projectRoot}/logs/nanoclaw.log</string>
@@ -207,6 +271,7 @@ function setupSystemd(
   homeDir: string,
 ): void {
   const runningAsRoot = isRoot();
+  const serviceEnv = getServiceEnvironment(homeDir);
 
   // Root uses system-level service, non-root uses user-level
   let unitPath: string;
@@ -243,8 +308,7 @@ ExecStart=${nodePath} ${projectRoot}/dist/index.js
 WorkingDirectory=${projectRoot}
 Restart=always
 RestartSec=5
-Environment=HOME=${homeDir}
-Environment=PATH=/usr/local/bin:/usr/bin:/bin:${homeDir}/.local/bin
+${renderSystemdEnvironment(serviceEnv)}
 StandardOutput=append:${projectRoot}/logs/nanoclaw.log
 StandardError=append:${projectRoot}/logs/nanoclaw.error.log
 

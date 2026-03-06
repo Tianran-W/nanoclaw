@@ -17,12 +17,15 @@ vi.mock('child_process', () => ({
 }));
 
 import {
+  CONTAINER_NETWORK_MODE,
   CONTAINER_RUNTIME_BIN,
   containerHostAccessArgs,
+  containerNetworkArgs,
   readonlyMountArgs,
   stopContainer,
   ensureContainerRuntimeRunning,
   cleanupOrphans,
+  usesHostNetwork,
 } from './container-runtime.js';
 import { logger } from './logger.js';
 
@@ -40,15 +43,35 @@ describe('readonlyMountArgs', () => {
 });
 
 describe('containerHostAccessArgs', () => {
-  it('adds host.docker.internal mapping on linux docker', () => {
-    expect(containerHostAccessArgs('linux')).toEqual([
-      '--add-host',
-      'host.docker.internal:host-gateway',
-    ]);
+  it('skips host.docker.internal mapping when using host networking', () => {
+    expect(containerHostAccessArgs('linux')).toEqual([]);
   });
 
   it('returns no extra args on non-linux platforms', () => {
     expect(containerHostAccessArgs('darwin')).toEqual([]);
+  });
+});
+
+describe('usesHostNetwork', () => {
+  it('enables host networking on linux docker', () => {
+    expect(usesHostNetwork('linux')).toBe(true);
+  });
+
+  it('disables host networking on non-linux platforms', () => {
+    expect(usesHostNetwork('darwin')).toBe(false);
+  });
+});
+
+describe('containerNetworkArgs', () => {
+  it('adds host network mode on linux docker', () => {
+    expect(containerNetworkArgs('linux')).toEqual([
+      '--network',
+      CONTAINER_NETWORK_MODE,
+    ]);
+  });
+
+  it('returns no network args on non-linux platforms', () => {
+    expect(containerNetworkArgs('darwin')).toEqual([]);
   });
 });
 

@@ -9,6 +9,31 @@ import { logger } from './logger.js';
 /** The container runtime binary name. */
 export const CONTAINER_RUNTIME_BIN = 'docker';
 
+/** The networking mode used for Linux Docker containers. */
+export const CONTAINER_NETWORK_MODE = 'host';
+
+/** Returns whether the runtime uses host networking. */
+export function usesHostNetwork(
+  platform: NodeJS.Platform = process.platform,
+): boolean {
+  return (
+    CONTAINER_RUNTIME_BIN === 'docker' &&
+    platform === 'linux' &&
+    CONTAINER_NETWORK_MODE === 'host'
+  );
+}
+
+/** Returns CLI args for the configured container network mode. */
+export function containerNetworkArgs(
+  platform: NodeJS.Platform = process.platform,
+): string[] {
+  if (!usesHostNetwork(platform)) {
+    return [];
+  }
+
+  return ['--network', CONTAINER_NETWORK_MODE];
+}
+
 /** Returns CLI args for a readonly bind mount. */
 export function readonlyMountArgs(
   hostPath: string,
@@ -22,6 +47,10 @@ export function containerHostAccessArgs(
   platform: NodeJS.Platform = process.platform,
 ): string[] {
   if (CONTAINER_RUNTIME_BIN !== 'docker' || platform !== 'linux') {
+    return [];
+  }
+
+  if (usesHostNetwork(platform)) {
     return [];
   }
 

@@ -20,6 +20,7 @@ import { logger } from './logger.js';
 import {
   CONTAINER_RUNTIME_BIN,
   containerHostAccessArgs,
+  containerNetworkArgs,
   readonlyMountArgs,
   stopContainer,
 } from './container-runtime.js';
@@ -188,6 +189,7 @@ function buildContainerArgs(
   containerName: string,
 ): string[] {
   const args: string[] = ['run', '-i', '--rm', '--name', containerName];
+  args.push(...containerNetworkArgs());
   args.push(...containerHostAccessArgs());
 
   // Run as host user so bind-mounted files are accessible.
