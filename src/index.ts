@@ -40,7 +40,12 @@ import {
 import { GroupQueue } from './group-queue.js';
 import { resolveGroupFolderPath } from './group-folder.js';
 import { startIpcWatcher } from './ipc.js';
-import { findChannel, formatMessages, formatOutbound } from './router.js';
+import {
+  createTurnMessageTracker,
+  findChannel,
+  formatMessages,
+  formatOutbound,
+} from './router.js';
 import {
   isSenderAllowed,
   isTriggerAllowed,
@@ -62,6 +67,41 @@ let messageLoopRunning = false;
 
 const channels: Channel[] = [];
 const queue = new GroupQueue();
+const turnMessageTracker = createTurnMessageTracker();
+
+async function sendOutboundMessage(
+  jid: string,
+  rawText: string,
+  source: 'agent-output' | 'ipc' | 'scheduler',
+  turnId?: string,
+): Promise<boolean> {
+  const channel = findChannel(channels, jid);
+  if (!channel) {
+    throw new Error(`No channel for JID: ${jid}`);
+  }
+
+  const text = formatOutbound(rawText);
+  if (!text) return false;
+
+  if (
+    source === 'agent-output' &&
+    !turnMessageTracker.shouldSendFinal(jid, turnId, text)
+  ) {
+    logger.info(
+      { jid, turnId },
+      'Suppressed final output already sent via tool message',
+    );
+    return false;
+  }
+
+  await channel.sendMessage(jid, text);
+
+  if (source === 'ipc') {
+    turnMessageTracker.noteToolMessage(jid, turnId, text);
+  }
+
+  return true;
+}
 
 function loadState(): void {
   lastTimestamp = getRouterState('last_timestamp') || '';
@@ -209,11 +249,12 @@ async function processGroupMessages(chatJid: string): Promise<boolean> {
         typeof result.result === 'string'
           ? result.result
           : JSON.stringify(result.result);
-      // Strip <internal>...</internal> blocks — agent uses these for internal reasoning
-      const text = raw.replace(/<internal>[\s\S]*?<\/internal>/g, '').trim();
       logger.info({ group: group.name }, `Agent output: ${raw.slice(0, 200)}`);
-      if (text) {
-        await channel.sendMessage(chatJid, text);
+      if (
+        await sendOutboundMessage(chatJid, raw, 'agent-output', result.turnId)
+      ) {
+        outputSentToUser = true;
+      } else if (turnMessageTracker.hasToolMessage(chatJid, result.turnId)) {
         outputSentToUser = true;
       }
       // Only reset idle timer on actual results, not session-update markers (result: null)
@@ -221,10 +262,15 @@ async function processGroupMessages(chatJid: string): Promise<boolean> {
     }
 
     if (result.status === 'success') {
+      turnMessageTracker.finishTurn(chatJid, result.turnId);
       queue.notifyIdle(chatJid);
     }
 
     if (result.status === 'error') {
+      if (turnMessageTracker.hasToolMessage(chatJid, result.turnId)) {
+        outputSentToUser = true;
+      }
+      turnMessageTracker.finishTurn(chatJid, result.turnId);
       hadError = true;
     }
   });
@@ -536,21 +582,16 @@ async function main(): Promise<void> {
     onProcess: (groupJid, proc, containerName, groupFolder) =>
       queue.registerProcess(groupJid, proc, containerName, groupFolder),
     sendMessage: async (jid, rawText) => {
-      const channel = findChannel(channels, jid);
-      if (!channel) {
+      try {
+        await sendOutboundMessage(jid, rawText, 'scheduler');
+      } catch {
         logger.warn({ jid }, 'No channel owns JID, cannot send message');
-        return;
       }
-      const text = formatOutbound(rawText);
-      if (text) await channel.sendMessage(jid, text);
     },
   });
   startIpcWatcher({
-    sendMessage: (jid, text) => {
-      const channel = findChannel(channels, jid);
-      if (!channel) throw new Error(`No channel for JID: ${jid}`);
-      return channel.sendMessage(jid, text);
-    },
+    sendMessage: (jid, text, meta) =>
+      sendOutboundMessage(jid, text, 'ipc', meta?.turnId).then(() => undefined),
     registeredGroups: () => registeredGroups,
     registerGroup,
     syncGroups: async (force: boolean) => {

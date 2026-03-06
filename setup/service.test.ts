@@ -153,6 +153,7 @@ describe('systemd unit generation', () => {
       'ExecStart=/usr/bin/node /srv/nanoclaw/dist/index.js',
     );
   });
+
 });
 
 describe('WSL nohup fallback', () => {

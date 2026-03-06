@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach } from 'vitest';
 
 import { _initTestDatabase, getAllChats, storeChatMetadata } from './db.js';
 import { getAvailableGroups, _setRegisteredGroups } from './index.js';
+import { createTurnMessageTracker } from './router.js';
 
 beforeEach(() => {
   _initTestDatabase();
@@ -166,5 +167,43 @@ describe('getAvailableGroups', () => {
   it('returns empty array when no chats exist', () => {
     const groups = getAvailableGroups();
     expect(groups).toHaveLength(0);
+  });
+});
+
+describe('turn message tracker', () => {
+  it('suppresses a final reply that matches a tool message from the same turn', () => {
+    const tracker = createTurnMessageTracker();
+
+    tracker.noteToolMessage('dc:1', 'turn-1', 'hello');
+
+    expect(tracker.shouldSendFinal('dc:1', 'turn-1', 'hello')).toBe(false);
+  });
+
+  it('allows a different final reply from the same turn', () => {
+    const tracker = createTurnMessageTracker();
+
+    tracker.noteToolMessage('dc:1', 'turn-1', 'progress update');
+
+    expect(tracker.shouldSendFinal('dc:1', 'turn-1', 'final answer')).toBe(
+      true,
+    );
+  });
+
+  it('does not cross-dedupe across turns', () => {
+    const tracker = createTurnMessageTracker();
+
+    tracker.noteToolMessage('dc:1', 'turn-1', 'hello');
+
+    expect(tracker.shouldSendFinal('dc:1', 'turn-2', 'hello')).toBe(true);
+  });
+
+  it('tracks whether a turn already emitted tool output', () => {
+    const tracker = createTurnMessageTracker();
+
+    tracker.noteToolMessage('dc:1', 'turn-1', 'hello');
+
+    expect(tracker.hasToolMessage('dc:1', 'turn-1')).toBe(true);
+    tracker.finishTurn('dc:1', 'turn-1');
+    expect(tracker.hasToolMessage('dc:1', 'turn-1')).toBe(false);
   });
 });

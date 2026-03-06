@@ -14,6 +14,7 @@ import { CronExpressionParser } from 'cron-parser';
 const IPC_DIR = '/workspace/ipc';
 const MESSAGES_DIR = path.join(IPC_DIR, 'messages');
 const TASKS_DIR = path.join(IPC_DIR, 'tasks');
+const CURRENT_TURN_FILE = path.join(IPC_DIR, 'current-turn.json');
 
 // Context from environment variables (set by the agent runner)
 const chatJid = process.env.NANOCLAW_CHAT_JID!;
@@ -32,6 +33,17 @@ function writeIpcFile(dir: string, data: object): string {
   fs.renameSync(tempPath, filepath);
 
   return filename;
+}
+
+function readCurrentTurnId(): string | undefined {
+  try {
+    const data = JSON.parse(fs.readFileSync(CURRENT_TURN_FILE, 'utf-8')) as {
+      turnId?: string;
+    };
+    return typeof data.turnId === 'string' ? data.turnId : undefined;
+  } catch {
+    return undefined;
+  }
 }
 
 const server = new McpServer({
@@ -54,6 +66,7 @@ server.tool(
       sender: args.sender || undefined,
       groupFolder,
       timestamp: new Date().toISOString(),
+      turnId: readCurrentTurnId(),
     };
 
     writeIpcFile(MESSAGES_DIR, data);
