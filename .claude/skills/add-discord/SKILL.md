@@ -1,3 +1,8 @@
+---
+name: add-discord
+description: Add Discord as a channel. Can replace other channels entirely or run alongside them. Uses a Discord bot token for authentication.
+---
+
 # Add Discord Channel
 
 This skill adds Discord support to NanoClaw using the skills engine for deterministic code changes, then walks through interactive setup.
