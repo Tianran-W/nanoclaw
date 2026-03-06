@@ -55,6 +55,7 @@ export interface ContainerOutput {
   status: 'success' | 'error';
   result: string | null;
   newSessionId?: string;
+  turnId?: string;
   error?: string;
 }
 

@@ -16,6 +16,7 @@
 
 import fs from 'fs';
 import path from 'path';
+import { randomUUID } from 'node:crypto';
 import {
   CopilotClient,
   CopilotSession,
@@ -42,6 +43,7 @@ interface ContainerOutput {
   status: 'success' | 'error';
   result: string | null;
   newSessionId?: string;
+  turnId?: string;
   error?: string;
 }
 
@@ -58,6 +60,7 @@ interface SessionsIndex {
 
 const IPC_INPUT_DIR = '/workspace/ipc/input';
 const IPC_INPUT_CLOSE_SENTINEL = path.join(IPC_INPUT_DIR, '_close');
+const CURRENT_TURN_FILE = '/workspace/ipc/current-turn.json';
 const IPC_POLL_MS = 500;
 
 async function readStdin(): Promise<string> {
@@ -81,6 +84,19 @@ function writeOutput(output: ContainerOutput): void {
 
 function log(message: string): void {
   console.error(`[agent-runner] ${message}`);
+}
+
+function writeCurrentTurnId(turnId?: string): void {
+  try {
+    if (!turnId) {
+      fs.rmSync(CURRENT_TURN_FILE, { force: true });
+      return;
+    }
+
+    fs.writeFileSync(CURRENT_TURN_FILE, JSON.stringify({ turnId }));
+  } catch (err) {
+    log(`Failed to write current turn id: ${err instanceof Error ? err.message : String(err)}`);
+  }
 }
 
 function getSessionSummary(sessionId: string, transcriptPath: string): string | null {
@@ -587,6 +603,9 @@ async function main(): Promise<void> {
       ipcPolling = true;
       setTimeout(pollIpc, IPC_POLL_MS);
 
+      const turnId = randomUUID();
+      writeCurrentTurnId(turnId);
+
       try {
         log(`Sending prompt (${prompt.length} chars)`);
         // 10 minute timeout — agent tasks involve tool use, web search, etc.
@@ -601,8 +620,10 @@ async function main(): Promise<void> {
         writeOutput({
           status: 'success',
           result,
-          newSessionId: sessionId
+          newSessionId: sessionId,
+          turnId,
         });
+        writeCurrentTurnId();
 
         // Check if close was requested during processing
         if (closeRequested) {
@@ -629,8 +650,10 @@ async function main(): Promise<void> {
           status: 'error',
           result: null,
           newSessionId: sessionId,
+          turnId,
           error: errorMessage
         });
+        writeCurrentTurnId();
 
         // Continue waiting for messages on error
         const nextMessage = await waitForIpcMessage();
@@ -659,6 +682,7 @@ async function main(): Promise<void> {
       }
     }
     log('Client stopped');
+    writeCurrentTurnId();
 
   } catch (err) {
     const errorMessage = err instanceof Error ? err.message : String(err);
@@ -670,6 +694,7 @@ async function main(): Promise<void> {
       newSessionId: session?.sessionId,
       error: errorMessage
     });
+    writeCurrentTurnId();
 
     // Graceful stop with timeout — fall back to forceStop if CLI is unresponsive
     try {

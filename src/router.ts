@@ -1,8 +1,7 @@
 import { Channel, NewMessage } from './types.js';
 
-interface RecentOutboundEntry {
-  text: string;
-  timestamp: number;
+function getTurnKey(jid: string, turnId: string): string {
+  return `${jid}\u0000${turnId}`;
 }
 
 export function escapeXml(s: string): string {
@@ -32,31 +31,68 @@ export function formatOutbound(rawText: string): string {
   return text;
 }
 
-export function createOutboundDeduper(windowMs = 15_000): {
-  shouldSend: (jid: string, text: string, now?: number) => boolean;
+export function createTurnMessageTracker(): {
+  noteToolMessage: (
+    jid: string,
+    turnId: string | undefined,
+    text: string,
+  ) => void;
+  shouldSendFinal: (
+    jid: string,
+    turnId: string | undefined,
+    text: string,
+  ) => boolean;
+  finishTurn: (jid: string, turnId: string | undefined) => void;
+  hasToolMessage: (jid: string, turnId: string | undefined) => boolean;
 } {
-  const recent = new Map<string, RecentOutboundEntry>();
+  const toolMessages = new Map<string, Set<string>>();
 
   return {
-    shouldSend(jid: string, text: string, now = Date.now()): boolean {
-      const previous = recent.get(jid);
-      if (
-        previous &&
-        previous.text === text &&
-        now - previous.timestamp <= windowMs
-      ) {
+    noteToolMessage(
+      jid: string,
+      turnId: string | undefined,
+      text: string,
+    ): void {
+      if (!turnId) {
+        return;
+      }
+
+      const key = getTurnKey(jid, turnId);
+      const texts = toolMessages.get(key) || new Set<string>();
+      texts.add(text);
+      toolMessages.set(key, texts);
+    },
+
+    shouldSendFinal(
+      jid: string,
+      turnId: string | undefined,
+      text: string,
+    ): boolean {
+      if (!turnId) {
+        return true;
+      }
+
+      const key = getTurnKey(jid, turnId);
+      const texts = toolMessages.get(key);
+      toolMessages.delete(key);
+
+      return !texts?.has(text);
+    },
+
+    finishTurn(jid: string, turnId: string | undefined): void {
+      if (!turnId) {
+        return;
+      }
+
+      toolMessages.delete(getTurnKey(jid, turnId));
+    },
+
+    hasToolMessage(jid: string, turnId: string | undefined): boolean {
+      if (!turnId) {
         return false;
       }
 
-      recent.set(jid, { text, timestamp: now });
-
-      for (const [key, entry] of recent) {
-        if (now - entry.timestamp > windowMs) {
-          recent.delete(key);
-        }
-      }
-
-      return true;
+      return toolMessages.has(getTurnKey(jid, turnId));
     },
   };
 }

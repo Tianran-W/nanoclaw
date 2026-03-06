@@ -1,0 +1,16 @@
+{
+  "extends": "../../../../../../container/agent-runner/tsconfig.json",
+  "compilerOptions": {
+    "rootDir": "./src",
+    "baseUrl": ".",
+    "paths": {
+      "@github/copilot-sdk": [
+        "../../../../../../container/agent-runner/node_modules/@github/copilot-sdk"
+      ],
+      "@modelcontextprotocol/sdk": [
+        "../../../../../../container/agent-runner/node_modules/@modelcontextprotocol/sdk"
+      ]
+    }
+  },
+  "include": ["src/**/*"]
+}

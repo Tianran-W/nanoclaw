@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach } from 'vitest';
 
 import { _initTestDatabase, getAllChats, storeChatMetadata } from './db.js';
 import { getAvailableGroups, _setRegisteredGroups } from './index.js';
-import { createOutboundDeduper } from './router.js';
+import { createTurnMessageTracker } from './router.js';
 
 beforeEach(() => {
   _initTestDatabase();
@@ -170,26 +170,40 @@ describe('getAvailableGroups', () => {
   });
 });
 
-describe('outbound deduper', () => {
-  it('suppresses identical text to the same jid within the window', () => {
-    const deduper = createOutboundDeduper(15_000);
+describe('turn message tracker', () => {
+  it('suppresses a final reply that matches a tool message from the same turn', () => {
+    const tracker = createTurnMessageTracker();
 
-    expect(deduper.shouldSend('dc:1', 'hello', 1_000)).toBe(true);
-    expect(deduper.shouldSend('dc:1', 'hello', 5_000)).toBe(false);
+    tracker.noteToolMessage('dc:1', 'turn-1', 'hello');
+
+    expect(tracker.shouldSendFinal('dc:1', 'turn-1', 'hello')).toBe(false);
   });
 
-  it('allows identical text after the window expires', () => {
-    const deduper = createOutboundDeduper(15_000);
+  it('allows a different final reply from the same turn', () => {
+    const tracker = createTurnMessageTracker();
 
-    expect(deduper.shouldSend('dc:1', 'hello', 1_000)).toBe(true);
-    expect(deduper.shouldSend('dc:1', 'hello', 20_001)).toBe(true);
+    tracker.noteToolMessage('dc:1', 'turn-1', 'progress update');
+
+    expect(tracker.shouldSendFinal('dc:1', 'turn-1', 'final answer')).toBe(
+      true,
+    );
   });
 
-  it('does not suppress different text or different jids', () => {
-    const deduper = createOutboundDeduper(15_000);
+  it('does not cross-dedupe across turns', () => {
+    const tracker = createTurnMessageTracker();
 
-    expect(deduper.shouldSend('dc:1', 'hello', 1_000)).toBe(true);
-    expect(deduper.shouldSend('dc:1', 'hello again', 2_000)).toBe(true);
-    expect(deduper.shouldSend('dc:2', 'hello', 3_000)).toBe(true);
+    tracker.noteToolMessage('dc:1', 'turn-1', 'hello');
+
+    expect(tracker.shouldSendFinal('dc:1', 'turn-2', 'hello')).toBe(true);
+  });
+
+  it('tracks whether a turn already emitted tool output', () => {
+    const tracker = createTurnMessageTracker();
+
+    tracker.noteToolMessage('dc:1', 'turn-1', 'hello');
+
+    expect(tracker.hasToolMessage('dc:1', 'turn-1')).toBe(true);
+    tracker.finishTurn('dc:1', 'turn-1');
+    expect(tracker.hasToolMessage('dc:1', 'turn-1')).toBe(false);
   });
 });

@@ -41,7 +41,7 @@ import { GroupQueue } from './group-queue.js';
 import { resolveGroupFolderPath } from './group-folder.js';
 import { startIpcWatcher } from './ipc.js';
 import {
-  createOutboundDeduper,
+  createTurnMessageTracker,
   findChannel,
   formatMessages,
   formatOutbound,
@@ -67,12 +67,13 @@ let messageLoopRunning = false;
 
 const channels: Channel[] = [];
 const queue = new GroupQueue();
-const outboundDeduper = createOutboundDeduper();
+const turnMessageTracker = createTurnMessageTracker();
 
 async function sendOutboundMessage(
   jid: string,
   rawText: string,
   source: 'agent-output' | 'ipc' | 'scheduler',
+  turnId?: string,
 ): Promise<boolean> {
   const channel = findChannel(channels, jid);
   if (!channel) {
@@ -82,12 +83,23 @@ async function sendOutboundMessage(
   const text = formatOutbound(rawText);
   if (!text) return false;
 
-  if (!outboundDeduper.shouldSend(jid, text)) {
-    logger.info({ jid, source }, 'Suppressed duplicate outbound message');
+  if (
+    source === 'agent-output' &&
+    !turnMessageTracker.shouldSendFinal(jid, turnId, text)
+  ) {
+    logger.info(
+      { jid, turnId },
+      'Suppressed final output already sent via tool message',
+    );
     return false;
   }
 
   await channel.sendMessage(jid, text);
+
+  if (source === 'ipc') {
+    turnMessageTracker.noteToolMessage(jid, turnId, text);
+  }
+
   return true;
 }
 
@@ -238,7 +250,11 @@ async function processGroupMessages(chatJid: string): Promise<boolean> {
           ? result.result
           : JSON.stringify(result.result);
       logger.info({ group: group.name }, `Agent output: ${raw.slice(0, 200)}`);
-      if (await sendOutboundMessage(chatJid, raw, 'agent-output')) {
+      if (
+        await sendOutboundMessage(chatJid, raw, 'agent-output', result.turnId)
+      ) {
+        outputSentToUser = true;
+      } else if (turnMessageTracker.hasToolMessage(chatJid, result.turnId)) {
         outputSentToUser = true;
       }
       // Only reset idle timer on actual results, not session-update markers (result: null)
@@ -246,10 +262,15 @@ async function processGroupMessages(chatJid: string): Promise<boolean> {
     }
 
     if (result.status === 'success') {
+      turnMessageTracker.finishTurn(chatJid, result.turnId);
       queue.notifyIdle(chatJid);
     }
 
     if (result.status === 'error') {
+      if (turnMessageTracker.hasToolMessage(chatJid, result.turnId)) {
+        outputSentToUser = true;
+      }
+      turnMessageTracker.finishTurn(chatJid, result.turnId);
       hadError = true;
     }
   });
@@ -569,8 +590,8 @@ async function main(): Promise<void> {
     },
   });
   startIpcWatcher({
-    sendMessage: (jid, text) =>
-      sendOutboundMessage(jid, text, 'ipc').then(() => undefined),
+    sendMessage: (jid, text, meta) =>
+      sendOutboundMessage(jid, text, 'ipc', meta?.turnId).then(() => undefined),
     registeredGroups: () => registeredGroups,
     registerGroup,
     syncGroups: async (force: boolean) => {
