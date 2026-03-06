@@ -26,6 +26,15 @@ export async function run(_args: string[]): Promise<void> {
   const projectRoot = process.cwd();
   const platform = getPlatform();
   const homeDir = os.homedir();
+  const envVars = readEnvFile([
+    'TELEGRAM_BOT_TOKEN',
+    'SLACK_BOT_TOKEN',
+    'SLACK_APP_TOKEN',
+    'DISCORD_BOT_TOKEN',
+    'COPILOT_MODEL',
+  ]);
+  const configuredModel =
+    process.env.COPILOT_MODEL || envVars.COPILOT_MODEL || 'default';
 
   logger.info('Starting verification');
 
@@ -111,13 +120,6 @@ export async function run(_args: string[]): Promise<void> {
   }
 
   // 4. Check channel auth (detect configured channels by credentials)
-  const envVars = readEnvFile([
-    'TELEGRAM_BOT_TOKEN',
-    'SLACK_BOT_TOKEN',
-    'SLACK_APP_TOKEN',
-    'DISCORD_BOT_TOKEN',
-  ]);
-
   const channelAuth: Record<string, string> = {};
 
   // WhatsApp: check for auth credentials on disk
@@ -186,6 +188,7 @@ export async function run(_args: string[]): Promise<void> {
     CREDENTIALS: credentials,
     CONFIGURED_CHANNELS: configuredChannels.join(','),
     CHANNEL_AUTH: JSON.stringify(channelAuth),
+    COPILOT_MODEL: configuredModel,
     REGISTERED_GROUPS: registeredGroups,
     MOUNT_ALLOWLIST: mountAllowlist,
     STATUS: status,

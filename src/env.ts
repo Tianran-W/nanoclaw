@@ -1,6 +1,48 @@
 import fs from 'fs';
 import path from 'path';
+import { CONTAINER_RUNTIME_BIN } from './container-runtime.js';
 import { logger } from './logger.js';
+
+const PROXY_ENV_KEYS = [
+  'HTTP_PROXY',
+  'HTTPS_PROXY',
+  'ALL_PROXY',
+  'NO_PROXY',
+  'http_proxy',
+  'https_proxy',
+  'all_proxy',
+  'no_proxy',
+];
+
+const CONTAINER_PROXY_KEYS = new Set([
+  'HTTP_PROXY',
+  'HTTPS_PROXY',
+  'ALL_PROXY',
+  'http_proxy',
+  'https_proxy',
+  'all_proxy',
+]);
+
+function rewriteLoopbackProxyForContainer(
+  value: string,
+  runtimeBin: string = CONTAINER_RUNTIME_BIN,
+): string {
+  if (runtimeBin !== 'docker') {
+    return value;
+  }
+
+  try {
+    const url = new URL(value);
+    if (!['127.0.0.1', 'localhost', '::1'].includes(url.hostname)) {
+      return value;
+    }
+
+    url.hostname = 'host.docker.internal';
+    return url.toString();
+  } catch {
+    return value;
+  }
+}
 
 /**
  * Parse the .env file and return values for the requested keys.
@@ -40,3 +82,23 @@ export function readEnvFile(keys: string[]): Record<string, string> {
 
   return result;
 }
+
+export function readProxyEnv(): Record<string, string> {
+  const envFileValues = readEnvFile(PROXY_ENV_KEYS);
+  const result: Record<string, string> = {};
+
+  for (const key of PROXY_ENV_KEYS) {
+    const value = process.env[key] || envFileValues[key];
+    if (value) {
+      result[key] = CONTAINER_PROXY_KEYS.has(key)
+        ? rewriteLoopbackProxyForContainer(value)
+        : value;
+    }
+  }
+
+  return result;
+}
+
+export const __testUtils = {
+  rewriteLoopbackProxyForContainer,
+};

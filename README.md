@@ -174,6 +174,24 @@ This allows you to use:
 
 Note: The model must support the Anthropic API format for best compatibility.
 
+**How do I choose which Copilot model NanoClaw uses?**
+
+Set `COPILOT_MODEL` in your `.env` file to an explicit model ID. If unset, NanoClaw uses the Copilot SDK default.
+
+```bash
+COPILOT_MODEL=gpt-5
+```
+
+To see which model IDs are available to your account, run:
+
+```bash
+npm run models
+```
+
+If your current Copilot auth does not allow `models.list`, NanoClaw still logs the resolved list during normal agent startup with an `Available models:` line from the agent runner.
+
+NanoClaw will also surface the configured model in the setup verify output.
+
 **How do I debug issues?**
 
 Ask Claude Code. "Why isn't the scheduler running?" "What's in the recent logs?" "Why did this message not get a response?" That's the AI-native approach that underlies NanoClaw.

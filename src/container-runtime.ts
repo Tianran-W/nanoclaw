@@ -17,6 +17,17 @@ export function readonlyMountArgs(
   return ['-v', `${hostPath}:${containerPath}:ro`];
 }
 
+/** Returns extra args that make the host reachable from inside the container. */
+export function containerHostAccessArgs(
+  platform: NodeJS.Platform = process.platform,
+): string[] {
+  if (CONTAINER_RUNTIME_BIN !== 'docker' || platform !== 'linux') {
+    return [];
+  }
+
+  return ['--add-host', 'host.docker.internal:host-gateway'];
+}
+
 /** Returns the shell command to stop a container by name. */
 export function stopContainer(name: string): string {
   return `${CONTAINER_RUNTIME_BIN} stop ${name}`;

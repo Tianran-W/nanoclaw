@@ -423,4 +423,21 @@ describe('registered group isMain', () => {
     expect(group).toBeDefined();
     expect(group.isMain).toBeUndefined();
   });
+
+  it('persists containerConfig.model through set/get round-trip', () => {
+    setRegisteredGroup('model@g.us', {
+      name: 'Model Group',
+      folder: 'model-group',
+      trigger: '@Andy',
+      added_at: '2024-01-01T00:00:00.000Z',
+      containerConfig: {
+        model: 'gpt-5',
+      },
+    });
+
+    const groups = getAllRegisteredGroups();
+    const group = groups['model@g.us'];
+    expect(group).toBeDefined();
+    expect(group.containerConfig?.model).toBe('gpt-5');
+  });
 });

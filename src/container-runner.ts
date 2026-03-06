@@ -15,10 +15,11 @@ import {
   GROUPS_DIR,
   IDLE_TIMEOUT,
 } from './config.js';
-import { readEnvFile } from './env.js';
+import { readEnvFile, readProxyEnv } from './env.js';
 import { logger } from './logger.js';
 import {
   CONTAINER_RUNTIME_BIN,
+  containerHostAccessArgs,
   readonlyMountArgs,
   stopContainer,
 } from './container-runtime.js';
@@ -48,6 +49,7 @@ export interface ContainerInput {
   isScheduledTask?: boolean;
   assistantName?: string;
   model?: string;
+  proxyEnv?: Record<string, string>;
   secrets?: Record<string, string>;
 }
 
@@ -186,6 +188,7 @@ function buildContainerArgs(
   containerName: string,
 ): string[] {
   const args: string[] = ['run', '-i', '--rm', '--name', containerName];
+  args.push(...containerHostAccessArgs());
 
   // Run as host user so bind-mounted files are accessible.
   // Skip when running as root (uid 0), as the container's node user (uid 1000),
@@ -266,10 +269,12 @@ export async function runContainerAgent(
 
     // Pass secrets via stdin (never written to disk or mounted as files)
     input.secrets = readSecrets();
+    input.proxyEnv = readProxyEnv();
     container.stdin.write(JSON.stringify(input));
     container.stdin.end();
     // Remove secrets from input so they don't appear in logs
     delete input.secrets;
+    delete input.proxyEnv;
 
     // Streaming output: parse OUTPUT_START/END marker pairs as they arrive
     let parseBuffer = '';

@@ -36,6 +36,7 @@ interface ContainerInput {
   isScheduledTask?: boolean;
   assistantName?: string;
   model?: string;
+  proxyEnv?: Record<string, string>;
   secrets?: Record<string, string>;
 }
 
@@ -490,6 +491,7 @@ async function main(): Promise<void> {
     PATH: process.env.PATH || '/usr/local/bin:/usr/bin:/bin',
     NODE_OPTIONS: '--dns-result-order=ipv4first',
     LANG: 'C.UTF-8',
+    ...(containerInput.proxyEnv || {}),
   };
 
   const client = new CopilotClient({

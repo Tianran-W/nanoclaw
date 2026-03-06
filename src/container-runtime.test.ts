@@ -18,6 +18,7 @@ vi.mock('child_process', () => ({
 
 import {
   CONTAINER_RUNTIME_BIN,
+  containerHostAccessArgs,
   readonlyMountArgs,
   stopContainer,
   ensureContainerRuntimeRunning,
@@ -35,6 +36,19 @@ describe('readonlyMountArgs', () => {
   it('returns -v flag with :ro suffix', () => {
     const args = readonlyMountArgs('/host/path', '/container/path');
     expect(args).toEqual(['-v', '/host/path:/container/path:ro']);
+  });
+});
+
+describe('containerHostAccessArgs', () => {
+  it('adds host.docker.internal mapping on linux docker', () => {
+    expect(containerHostAccessArgs('linux')).toEqual([
+      '--add-host',
+      'host.docker.internal:host-gateway',
+    ]);
+  });
+
+  it('returns no extra args on non-linux platforms', () => {
+    expect(containerHostAccessArgs('darwin')).toEqual([]);
   });
 });
 
