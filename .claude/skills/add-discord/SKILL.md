@@ -40,7 +40,7 @@ This deterministically:
 - Adds `src/channels/discord.ts` (DiscordChannel class with self-registration via `registerChannel`)
 - Adds `src/channels/discord.test.ts` (unit tests with discord.js mock)
 - Appends `import './discord.js'` to the channel barrel file `src/channels/index.ts`
-- Installs the `discord.js` npm dependency
+- Installs the `discord.js`, `proxy-agent`, and `undici` npm dependencies
 - Records the application in `.nanoclaw/state.yaml`
 
 If the apply reports merge conflicts, read the intent file:
@@ -99,7 +99,16 @@ The container reads environment from `data/env/env`, not `.env` directly.
 
 ```bash
 npm run build
+```
+
+Restart the service using the platform's service manager:
+
+```bash
+# macOS
 launchctl kickstart -k gui/$(id -u)/com.nanoclaw
+
+# Linux user service
+systemctl --user restart nanoclaw
 ```
 
 ## Phase 4: Registration
@@ -116,7 +125,7 @@ Tell the user:
 >
 > The channel ID will be a long number like `1234567890123456`.
 
-Wait for the user to provide the channel ID (format: `dc:1234567890123456`).
+Wait for the user to provide the numeric channel ID. Normalize it to `dc:<channel-id>` when registering.
 
 ### Register the channel
 
@@ -172,8 +181,11 @@ tail -f logs/nanoclaw.log
 1. Check `DISCORD_BOT_TOKEN` is set in `.env` AND synced to `data/env/env`
 2. Check channel is registered: `sqlite3 store/messages.db "SELECT * FROM registered_groups WHERE jid LIKE 'dc:%'"`
 3. For non-main channels: message must include trigger pattern (@mention the bot)
-4. Service is running: `launchctl list | grep nanoclaw`
+4. Service is running:
+  - macOS: `launchctl list | grep nanoclaw`
+  - Linux: `systemctl --user status nanoclaw`
 5. Verify the bot has been invited to the server (check OAuth2 URL was used)
+6. If the host needs an outbound proxy, ensure `HTTP_PROXY` / `HTTPS_PROXY` / `ALL_PROXY` is set in the service environment before restart
 
 ### Bot only responds to @mentions
 
@@ -183,11 +195,13 @@ This is the default behavior for non-main channels (`requiresTrigger: true`). To
 
 ### Message Content Intent not enabled
 
-If the bot connects but can't read messages, ensure:
+If the service log shows `Used disallowed intents`, ensure:
 1. Go to [Discord Developer Portal](https://discord.com/developers/applications)
 2. Select your application > **Bot** tab
 3. Under **Privileged Gateway Intents**, enable **Message Content Intent**
 4. Restart NanoClaw
+
+Re-inviting the bot with a new OAuth2 URL is not enough by itself — the setting must be enabled on the **Bot** page.
 
 ### Getting Channel ID
 
@@ -204,3 +218,5 @@ The Discord bot supports:
 - @mention translation (Discord `<@botId>` → NanoClaw trigger format)
 - Message splitting for responses over 2000 characters
 - Typing indicators while the agent processes
+- Proxy-aware Discord REST and gateway connections when proxy environment variables are present
+- Fail-fast startup errors when Discord login or gateway negotiation fails

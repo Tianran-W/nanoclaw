@@ -10,6 +10,8 @@ modifies:
 structured:
   npm_dependencies:
     discord.js: "^14.18.0"
+    proxy-agent: "^6.5.0"
+    undici: "^7.22.0"
   env_additions:
     - DISCORD_BOT_TOKEN
 conflicts: []

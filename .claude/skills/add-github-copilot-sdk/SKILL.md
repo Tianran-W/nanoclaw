@@ -11,7 +11,12 @@ Switch NanoClaw from Claude Agent SDK to GitHub Copilot SDK.
 
 - GitHub Copilot subscription
 - `gh` CLI installed and logged in (`gh auth login`)
-- SDK repo cloned locally: `git clone git@github.com:github/copilot-sdk.git`
+
+For implementation work on this skill, keep a local checkout of the SDK handy:
+
+```bash
+git clone git@github.com:github/copilot-sdk.git
+```
 
 ## Keep Dependency Current
 
@@ -45,7 +50,7 @@ Repo default: `@github/copilot-sdk@^0.1.25` in container/agent-runner/package.js
 
 1. Add `.env` token:
    ```
-   GITHUB_TOKEN=ghp_xxxx
+  GITHUB_TOKEN=gho_xxxx
    ```
 2. (Optional) Set model overrides (IDs come from `listModels()` and container startup logs):
    ```

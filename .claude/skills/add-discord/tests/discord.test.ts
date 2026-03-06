@@ -13,6 +13,8 @@ describe('discord skill package', () => {
     expect(content).toContain('skill: discord');
     expect(content).toContain('version: 1.0.0');
     expect(content).toContain('discord.js');
+    expect(content).toContain('proxy-agent');
+    expect(content).toContain('undici');
   });
 
   it('has all files declared in adds', () => {
@@ -29,6 +31,8 @@ describe('discord skill package', () => {
     expect(content).toContain('class DiscordChannel');
     expect(content).toContain('implements Channel');
     expect(content).toContain("registerChannel('discord'");
+    expect(content).toContain('Discord proxy enabled');
+    expect(content).toContain('Discord login failed');
 
     // Test file for the channel
     const testFile = path.join(

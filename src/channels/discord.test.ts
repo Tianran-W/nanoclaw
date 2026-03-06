@@ -43,9 +43,7 @@ const proxyAgentCtor = vi.hoisted(() =>
       proxyUrl: string | undefined;
       getProxyForUrl: (() => string) | undefined;
 
-      constructor(options?: {
-        getProxyForUrl?: () => string;
-      }) {
+      constructor(options?: { getProxyForUrl?: () => string }) {
         this.getProxyForUrl = options?.getProxyForUrl;
         this.proxyUrl = options?.getProxyForUrl?.();
       }
@@ -205,9 +203,7 @@ function createMessage(overrides: {
     member: overrides.memberDisplayName
       ? { displayName: overrides.memberDisplayName }
       : null,
-    guild: overrides.guildName
-      ? { name: overrides.guildName }
-      : null,
+    guild: overrides.guildName ? { name: overrides.guildName } : null,
     channel: {
       name: overrides.channelName ?? 'general',
       messages: {
@@ -281,7 +277,9 @@ describe('DiscordChannel', () => {
       const opts = createTestOpts();
       const channel = new DiscordChannel('test-token', opts);
 
-      await expect(channel.connect()).rejects.toThrow('Used disallowed intents');
+      await expect(channel.connect()).rejects.toThrow(
+        'Used disallowed intents',
+      );
       expect(channel.isConnected()).toBe(false);
     });
 
@@ -317,9 +315,9 @@ describe('DiscordChannel', () => {
           getProxyForUrl: expect.any(Function),
         }),
       );
-      expect(
-        proxyAgentCtor.mock.calls[0]?.[0]?.getProxyForUrl?.(),
-      ).toBe('http://127.0.0.1:7897');
+      expect(proxyAgentCtor.mock.calls[0]?.[0]?.getProxyForUrl?.()).toBe(
+        'http://127.0.0.1:7897',
+      );
       expect(currentClient().options.rest.agent).toEqual(
         expect.objectContaining({ kind: 'env-http-proxy-agent' }),
       );
@@ -365,9 +363,9 @@ describe('DiscordChannel', () => {
           getProxyForUrl: expect.any(Function),
         }),
       );
-      expect(
-        proxyAgentCtor.mock.calls[0]?.[0]?.getProxyForUrl?.(),
-      ).toBe('http://127.0.0.1:7897');
+      expect(proxyAgentCtor.mock.calls[0]?.[0]?.getProxyForUrl?.()).toBe(
+        'http://127.0.0.1:7897',
+      );
       expect(socket.options).toEqual(
         expect.objectContaining({
           handshakeTimeout: 30000,
@@ -776,8 +774,11 @@ describe('DiscordChannel', () => {
 
       await channel.sendMessage('dc:1234567890123456', 'Hello');
 
-      const fetchedChannel = await currentClient().channels.fetch('1234567890123456');
-      expect(currentClient().channels.fetch).toHaveBeenCalledWith('1234567890123456');
+      const fetchedChannel =
+        await currentClient().channels.fetch('1234567890123456');
+      expect(currentClient().channels.fetch).toHaveBeenCalledWith(
+        '1234567890123456',
+      );
     });
 
     it('strips dc: prefix from JID', async () => {

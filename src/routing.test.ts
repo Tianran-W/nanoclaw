@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach } from 'vitest';
 
 import { _initTestDatabase, getAllChats, storeChatMetadata } from './db.js';
 import { getAvailableGroups, _setRegisteredGroups } from './index.js';
+import { createOutboundDeduper } from './router.js';
 
 beforeEach(() => {
   _initTestDatabase();
@@ -166,5 +167,29 @@ describe('getAvailableGroups', () => {
   it('returns empty array when no chats exist', () => {
     const groups = getAvailableGroups();
     expect(groups).toHaveLength(0);
+  });
+});
+
+describe('outbound deduper', () => {
+  it('suppresses identical text to the same jid within the window', () => {
+    const deduper = createOutboundDeduper(15_000);
+
+    expect(deduper.shouldSend('dc:1', 'hello', 1_000)).toBe(true);
+    expect(deduper.shouldSend('dc:1', 'hello', 5_000)).toBe(false);
+  });
+
+  it('allows identical text after the window expires', () => {
+    const deduper = createOutboundDeduper(15_000);
+
+    expect(deduper.shouldSend('dc:1', 'hello', 1_000)).toBe(true);
+    expect(deduper.shouldSend('dc:1', 'hello', 20_001)).toBe(true);
+  });
+
+  it('does not suppress different text or different jids', () => {
+    const deduper = createOutboundDeduper(15_000);
+
+    expect(deduper.shouldSend('dc:1', 'hello', 1_000)).toBe(true);
+    expect(deduper.shouldSend('dc:1', 'hello again', 2_000)).toBe(true);
+    expect(deduper.shouldSend('dc:2', 'hello', 3_000)).toBe(true);
   });
 });

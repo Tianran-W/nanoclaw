@@ -33,6 +33,7 @@ interface ContainerInput {
   chatJid: string;
   isMain: boolean;
   isScheduledTask?: boolean;
+  assistantName?: string;
   model?: string;
   secrets?: Record<string, string>;
 }
@@ -106,7 +107,11 @@ function getSessionSummary(sessionId: string, transcriptPath: string): string | 
 /**
  * Archive the conversation transcript to conversations/ directory.
  */
-function archiveConversation(events: SessionEvent[], sessionId: string): void {
+function archiveConversation(
+  events: SessionEvent[],
+  sessionId: string,
+  assistantName?: string,
+): void {
   if (events.length === 0) {
     log('No events to archive');
     return;
@@ -147,7 +152,11 @@ function archiveConversation(events: SessionEvent[], sessionId: string): void {
     const filename = `${date}-${name}.md`;
     const filePath = path.join(conversationsDir, filename);
 
-    const markdown = formatTranscriptMarkdown(parsedMessages, summary);
+    const markdown = formatTranscriptMarkdown(
+      parsedMessages,
+      summary,
+      assistantName,
+    );
     fs.writeFileSync(filePath, markdown);
 
     log(`Archived conversation to ${filePath}`);
@@ -174,7 +183,11 @@ interface ParsedMessage {
   content: string;
 }
 
-function formatTranscriptMarkdown(messages: ParsedMessage[], title?: string | null): string {
+function formatTranscriptMarkdown(
+  messages: ParsedMessage[],
+  title?: string | null,
+  assistantName?: string,
+): string {
   const now = new Date();
   const formatDateTime = (d: Date) => d.toLocaleString('en-US', {
     month: 'short',
@@ -193,7 +206,7 @@ function formatTranscriptMarkdown(messages: ParsedMessage[], title?: string | nu
   lines.push('');
 
   for (const msg of messages) {
-    const sender = msg.role === 'user' ? 'User' : 'Andy';
+    const sender = msg.role === 'user' ? 'User' : (assistantName || 'Assistant');
     const content = msg.content.length > 2000
       ? msg.content.slice(0, 2000) + '...'
       : msg.content;
@@ -503,7 +516,7 @@ async function main(): Promise<void> {
       try {
         const events = await session.getMessages();
         if (events.length > 0) {
-          archiveConversation(events, sid);
+          archiveConversation(events, sid, containerInput.assistantName);
         }
       } catch (err) {
         log(`Archive error in hook: ${err instanceof Error ? err.message : String(err)}`);
@@ -632,7 +645,7 @@ async function main(): Promise<void> {
     try {
       const events = await session.getMessages();
       if (events.length > 0) {
-        archiveConversation(events, sessionId);
+        archiveConversation(events, sessionId, containerInput.assistantName);
       }
     } catch (err) {
       log(`Archive error: ${err instanceof Error ? err.message : String(err)}`);

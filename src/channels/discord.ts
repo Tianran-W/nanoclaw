@@ -1,11 +1,6 @@
 import { createRequire } from 'node:module';
 
-import type {
-  Client,
-  ClientOptions,
-  Message,
-  TextChannel,
-} from 'discord.js';
+import type { Client, ClientOptions, Message, TextChannel } from 'discord.js';
 import { ProxyAgent } from 'proxy-agent';
 import { EnvHttpProxyAgent } from 'undici';
 
@@ -88,7 +83,11 @@ export function patchDiscordWebSocketProxy(
   });
 
   class ProxyAwareWebSocket extends OriginalWebSocket {
-    constructor(address: unknown, protocols?: unknown, options?: Record<string, unknown>) {
+    constructor(
+      address: unknown,
+      protocols?: unknown,
+      options?: Record<string, unknown>,
+    ) {
       super(address, protocols, {
         ...(options ?? {}),
         agent: options?.agent ?? proxyAgent,
@@ -123,10 +122,7 @@ export class DiscordChannel implements Channel {
 
     if (proxyUrl) {
       patchDiscordWebSocketProxy(proxyUrl);
-      logger.info(
-        { proxy: redactProxyUrl(proxyUrl) },
-        'Discord proxy enabled',
-      );
+      logger.info({ proxy: redactProxyUrl(proxyUrl) }, 'Discord proxy enabled');
     }
 
     const discord = (await import('discord.js')) as DiscordRuntime;
@@ -197,18 +193,20 @@ export class DiscordChannel implements Channel {
 
       // Handle attachments — store placeholders so the agent knows something was sent
       if (message.attachments.size > 0) {
-        const attachmentDescriptions = [...message.attachments.values()].map((att) => {
-          const contentType = att.contentType || '';
-          if (contentType.startsWith('image/')) {
-            return `[Image: ${att.name || 'image'}]`;
-          } else if (contentType.startsWith('video/')) {
-            return `[Video: ${att.name || 'video'}]`;
-          } else if (contentType.startsWith('audio/')) {
-            return `[Audio: ${att.name || 'audio'}]`;
-          } else {
-            return `[File: ${att.name || 'file'}]`;
-          }
-        });
+        const attachmentDescriptions = [...message.attachments.values()].map(
+          (att) => {
+            const contentType = att.contentType || '';
+            if (contentType.startsWith('image/')) {
+              return `[Image: ${att.name || 'image'}]`;
+            } else if (contentType.startsWith('video/')) {
+              return `[Video: ${att.name || 'video'}]`;
+            } else if (contentType.startsWith('audio/')) {
+              return `[Audio: ${att.name || 'audio'}]`;
+            } else {
+              return `[File: ${att.name || 'file'}]`;
+            }
+          },
+        );
         if (content) {
           content = `${content}\n${attachmentDescriptions.join('\n')}`;
         } else {
@@ -234,7 +232,13 @@ export class DiscordChannel implements Channel {
 
       // Store chat metadata for discovery
       const isGroup = message.guild !== null;
-      this.opts.onChatMetadata(chatJid, timestamp, chatName, 'discord', isGroup);
+      this.opts.onChatMetadata(
+        chatJid,
+        timestamp,
+        chatName,
+        'discord',
+        isGroup,
+      );
 
       // Only deliver full message for registered groups
       const group = this.opts.registeredGroups()[chatJid];
@@ -300,9 +304,9 @@ export class DiscordChannel implements Channel {
         rejectOnce(err, 'Discord client failed during startup');
       });
 
-      this.client!
-        .login(this.botToken)
-        .catch((err) => rejectOnce(err, 'Discord login failed'));
+      this.client!.login(this.botToken).catch((err) =>
+        rejectOnce(err, 'Discord login failed'),
+      );
     });
   }
 

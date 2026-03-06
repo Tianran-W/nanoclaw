@@ -40,7 +40,12 @@ import {
 import { GroupQueue } from './group-queue.js';
 import { resolveGroupFolderPath } from './group-folder.js';
 import { startIpcWatcher } from './ipc.js';
-import { findChannel, formatMessages, formatOutbound } from './router.js';
+import {
+  createOutboundDeduper,
+  findChannel,
+  formatMessages,
+  formatOutbound,
+} from './router.js';
 import {
   isSenderAllowed,
   isTriggerAllowed,
@@ -62,6 +67,29 @@ let messageLoopRunning = false;
 
 const channels: Channel[] = [];
 const queue = new GroupQueue();
+const outboundDeduper = createOutboundDeduper();
+
+async function sendOutboundMessage(
+  jid: string,
+  rawText: string,
+  source: 'agent-output' | 'ipc' | 'scheduler',
+): Promise<boolean> {
+  const channel = findChannel(channels, jid);
+  if (!channel) {
+    throw new Error(`No channel for JID: ${jid}`);
+  }
+
+  const text = formatOutbound(rawText);
+  if (!text) return false;
+
+  if (!outboundDeduper.shouldSend(jid, text)) {
+    logger.info({ jid, source }, 'Suppressed duplicate outbound message');
+    return false;
+  }
+
+  await channel.sendMessage(jid, text);
+  return true;
+}
 
 function loadState(): void {
   lastTimestamp = getRouterState('last_timestamp') || '';
@@ -209,11 +237,8 @@ async function processGroupMessages(chatJid: string): Promise<boolean> {
         typeof result.result === 'string'
           ? result.result
           : JSON.stringify(result.result);
-      // Strip <internal>...</internal> blocks — agent uses these for internal reasoning
-      const text = raw.replace(/<internal>[\s\S]*?<\/internal>/g, '').trim();
       logger.info({ group: group.name }, `Agent output: ${raw.slice(0, 200)}`);
-      if (text) {
-        await channel.sendMessage(chatJid, text);
+      if (await sendOutboundMessage(chatJid, raw, 'agent-output')) {
         outputSentToUser = true;
       }
       // Only reset idle timer on actual results, not session-update markers (result: null)
@@ -536,21 +561,16 @@ async function main(): Promise<void> {
     onProcess: (groupJid, proc, containerName, groupFolder) =>
       queue.registerProcess(groupJid, proc, containerName, groupFolder),
     sendMessage: async (jid, rawText) => {
-      const channel = findChannel(channels, jid);
-      if (!channel) {
+      try {
+        await sendOutboundMessage(jid, rawText, 'scheduler');
+      } catch {
         logger.warn({ jid }, 'No channel owns JID, cannot send message');
-        return;
       }
-      const text = formatOutbound(rawText);
-      if (text) await channel.sendMessage(jid, text);
     },
   });
   startIpcWatcher({
-    sendMessage: (jid, text) => {
-      const channel = findChannel(channels, jid);
-      if (!channel) throw new Error(`No channel for JID: ${jid}`);
-      return channel.sendMessage(jid, text);
-    },
+    sendMessage: (jid, text) =>
+      sendOutboundMessage(jid, text, 'ipc').then(() => undefined),
     registeredGroups: () => registeredGroups,
     registerGroup,
     syncGroups: async (force: boolean) => {

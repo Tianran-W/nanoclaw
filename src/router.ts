@@ -1,5 +1,10 @@
 import { Channel, NewMessage } from './types.js';
 
+interface RecentOutboundEntry {
+  text: string;
+  timestamp: number;
+}
+
 export function escapeXml(s: string): string {
   if (!s) return '';
   return s
@@ -25,6 +30,35 @@ export function formatOutbound(rawText: string): string {
   const text = stripInternalTags(rawText);
   if (!text) return '';
   return text;
+}
+
+export function createOutboundDeduper(windowMs = 15_000): {
+  shouldSend: (jid: string, text: string, now?: number) => boolean;
+} {
+  const recent = new Map<string, RecentOutboundEntry>();
+
+  return {
+    shouldSend(jid: string, text: string, now = Date.now()): boolean {
+      const previous = recent.get(jid);
+      if (
+        previous &&
+        previous.text === text &&
+        now - previous.timestamp <= windowMs
+      ) {
+        return false;
+      }
+
+      recent.set(jid, { text, timestamp: now });
+
+      for (const [key, entry] of recent) {
+        if (now - entry.timestamp > windowMs) {
+          recent.delete(key);
+        }
+      }
+
+      return true;
+    },
+  };
 }
 
 export function routeOutbound(
